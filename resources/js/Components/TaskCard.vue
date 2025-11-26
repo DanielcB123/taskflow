@@ -310,7 +310,7 @@ function submitAddTag() {
       <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <select
           v-model="localAssignedId"
-          class="text-[11px] rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          class="text-[11px] dark:text-white rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
           @change="onAssignChange"
         >
           <option value="">Unassigned</option>
@@ -323,15 +323,6 @@ function submitAddTag() {
           </option>
         </select>
 
-        <button
-          type="button"
-          class="p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700
-                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
-          @click="$emit('edit', { openFull: true })"
-          aria-label="Edit task"
-        >
-          ✏️
-        </button>
         <button
           type="button"
           class="p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-900/40

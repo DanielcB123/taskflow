@@ -1,4 +1,5 @@
 <script setup>
+//CommandPalette.vue
 import {
   ref,
   computed,
@@ -141,6 +142,14 @@ const baseCommands = computed(() => {
   // Column commands
   items.push(
     {
+      id: 'col-all',
+      type: 'command',
+      label: 'View all columns',
+      description: 'Show all task columns',
+      command: 'switch-column',
+      payload: 'all',
+    },
+    {
       id: 'col-todo',
       type: 'command',
       label: 'View To Do column',
@@ -170,12 +179,15 @@ const baseCommands = computed(() => {
 });
 
 const taskResults = computed(() => {
-  const q = query.value.trim().toLowerCase();
+  const raw = query.value.trim().toLowerCase();
+  const isTaskSearch = raw.startsWith('/');
+  const q = (isTaskSearch ? raw.slice(1) : raw).trim(); // strip leading '/'
+
   if (!q || q.length < 2) return [];
 
   const matches = props.tasks.filter((t) => {
     const title = (t.title || '').toLowerCase();
-    const desc = (t.description || '').toLowerCase();
+    const desc  = (t.description || '').toLowerCase();
     return title.includes(q) || desc.includes(q);
   });
 
@@ -183,21 +195,32 @@ const taskResults = computed(() => {
     id: `task-${t.id}`,
     type: 'task',
     label: t.title || '(Untitled task)',
-    description: 'Mark this task as done',
+    description: 'Filter the board to this task or mark it as done',
     taskId: t.id,
   }));
 });
 
+
+
 const filteredCommands = computed(() => {
-  const q = query.value.trim().toLowerCase();
+  const raw = query.value.trim().toLowerCase();
+  const isTaskSearch = raw.startsWith('/');
+  const q = (isTaskSearch ? raw.slice(1) : raw).trim();
+
+  // If we are doing "/something", hide commands and only show tasks
+  if (isTaskSearch) {
+    return [];
+  }
+
   if (!q) return baseCommands.value.slice(0, 10);
 
   return baseCommands.value.filter((cmd) => {
     const label = cmd.label.toLowerCase();
-    const desc = (cmd.description || '').toLowerCase();
+    const desc  = (cmd.description || '').toLowerCase();
     return label.includes(q) || desc.includes(q);
   });
 });
+
 
 const results = computed(() => {
   return [...filteredCommands.value, ...taskResults.value];
@@ -229,21 +252,30 @@ function selectCurrent() {
   if (item.type === 'command') {
     runCommand(item);
   } else if (item.type === 'task') {
-    emits('mark-task-done', item.taskId);
+    // Filter board to this task
+    const label = (item.label || '').trim();
+    emits('set-search', label);
   }
 
   closePalette();
 }
+
 
 function runCommand(item) {
   switch (item.command) {
     case 'create-task':
       emits('create-task');
       break;
-    case 'search':
-      // Use current query as board search
-      emits('set-search', query.value);
+    case 'search': {
+      // Use current query as board search, strip leading '/'
+      const raw = query.value || '';
+      const cleaned = raw.startsWith('/')
+        ? raw.slice(1).trim()
+        : raw.trim();
+
+      emits('set-search', cleaned);
       break;
+    }
     case 'set-filter-assigned':
       emits('set-filter-assigned', item.payload);
       break;
@@ -252,6 +284,7 @@ function runCommand(item) {
       break;
   }
 }
+
 </script>
 
 <template>
@@ -296,45 +329,57 @@ function runCommand(item) {
 
               <ul v-else class="py-1 text-sm">
                 <li
-                  v-for="(item, idx) in results"
-                  :key="item.id"
-                  class="px-3 py-2 flex items-center justify-between gap-2 cursor-pointer
-                         transition-colors"
-                  :class="[
+                v-for="(item, idx) in results"
+                :key="item.id"
+                class="px-3 py-2 flex items-center justify-between gap-2 cursor-pointer
+                        transition-colors"
+                :class="[
                     idx === selectedIndex
-                      ? 'bg-blue-50 dark:bg-slate-800 text-slate-900 dark:text-slate-50'
-                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/80',
-                  ]"
-                  @mouseenter="selectedIndex = idx"
-                  @click="() => { selectedIndex = idx; selectCurrent(); }"
+                    ? 'bg-blue-50 dark:bg-slate-800 text-slate-900 dark:text-slate-50'
+                    : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/80',
+                ]"
+                @mouseenter="selectedIndex = idx"
+                @click="() => { selectedIndex = idx; selectCurrent(); }"
                 >
-                  <div class="flex flex-col">
+                <div class="flex flex-col">
                     <span class="text-xs font-medium">
-                      <span v-if="item.type === 'task'">✅ </span>{{ item.label }}
+                    <span v-if="item.type === 'task'">✅ </span>{{ item.label }}
                     </span>
                     <span
-                      v-if="item.description"
-                      class="text-[11px] text-slate-400 dark:text-slate-400"
+                    v-if="item.description"
+                    class="text-[11px] text-slate-400 dark:text-slate-400"
                     >
-                      {{ item.description }}
+                    {{ item.description }}
                     </span>
-                  </div>
+                </div>
 
-                  <div class="flex items-center gap-2 text-[10px] text-slate-400">
+                <div class="flex items-center gap-2 text-[10px] text-slate-400">
+                    <!-- command shortcuts -->
                     <span
-                      v-if="item.type === 'command' && item.shortcut"
-                      class="px-1.5 py-0.5 rounded-md border border-slate-300 dark:border-slate-600"
+                    v-if="item.type === 'command' && item.shortcut"
+                    class="px-1.5 py-0.5 rounded-md border border-slate-300 dark:border-slate-600"
                     >
-                      {{ item.shortcut }}
+                    {{ item.shortcut }}
                     </span>
-                    <span
-                      v-if="item.type === 'task'"
-                      class="px-1.5 py-0.5 rounded-md border border-slate-300 dark:border-slate-600"
+
+                    <!-- task "Done" button -->
+                    <button
+                    v-if="item.type === 'task'"
+                    type="button"
+                    class="px-1.5 py-0.5 rounded-md border border-slate-300 dark:border-slate-600
+                            hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+                    @click.stop="
+                        () => {
+                        emits('mark-task-done', item.taskId);
+                        closePalette();
+                        }
+                    "
                     >
-                      Mark as done
-                    </span>
-                  </div>
+                    Done
+                    </button>
+                </div>
                 </li>
+
               </ul>
             </div>
 
