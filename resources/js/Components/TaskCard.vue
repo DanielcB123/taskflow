@@ -49,7 +49,7 @@ watch(
   }
 );
 
-const priorities = ['high','medium', 'low'];
+const priorities = ['high', 'medium', 'low'];
 
 const priorityColor = computed(() => {
   switch (props.task.priority) {
@@ -61,6 +61,8 @@ const priorityColor = computed(() => {
       return 'bg-emerald-500/10 text-emerald-600 border-emerald-400/50';
   }
 });
+
+const isMoving = computed(() => !!props.task._isMoving);
 
 function onPriorityClick() {
   const current = props.task.priority || 'medium';
@@ -115,7 +117,6 @@ function handleRemoveTag(tagToRemove) {
     if (tag.id && tagToRemove.id) {
       return tag.id !== tagToRemove.id;
     }
-    // fall back to name match if no id yet
     return !(tag.name === tagToRemove.name && tag.color === tagToRemove.color);
   });
 
@@ -154,9 +155,12 @@ function submitAddTag() {
 
 <template>
   <div
-    class="group cursor-grab active:cursor-grabbing hover:-translate-y-1 transition-all duration-200
+    class="group cursor-grab active:cursor-grabbing transition-all duration-200
            rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900
-           shadow-sm hover:shadow-lg p-3 space-y-2"
+           shadow-sm hover:shadow-lg p-3 space-y-2 hover:-translate-y-1"
+    :class="[
+      isMoving ? 'opacity-60 scale-[0.99] pointer-events-none' : '',
+    ]"
     draggable="true"
     @dragstart="onDragStart"
   >
@@ -166,14 +170,16 @@ function submitAddTag() {
           v-if="isEditingTitle"
           v-model="localTitle"
           type="text"
-          class="w-full text-sm font-semibold bg-transparent border-b border-blue-400 outline-none"
+          class="w-full text-sm font-semibold bg-transparent border-b border-blue-400 outline-none
+                 focus-visible:ring-0"
           @blur="onTitleBlur"
           @keyup.enter.prevent="onTitleBlur"
         />
         <button
           v-else
           type="button"
-          class="text-left text-sm font-semibold text-slate-900 dark:text-slate-50 truncate w-full"
+          class="text-left text-sm font-semibold text-slate-900 dark:text-slate-50 truncate w-full
+                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 rounded-sm"
           @click="isEditingTitle = true"
         >
           {{ task.title }}
@@ -182,14 +188,14 @@ function submitAddTag() {
       <button
         type="button"
         class="text-[11px] px-2 py-0.5 rounded-full border font-medium
-              hover:brightness-110 transition-colors"
+               hover:brightness-110 transition-colors
+               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
         :class="priorityColor"
         @click="onPriorityClick"
         title="Click to change priority"
       >
         {{ task.priority.toUpperCase() }}
       </button>
-
     </div>
 
     <div class="text-xs text-slate-500 dark:text-slate-300">
@@ -197,14 +203,16 @@ function submitAddTag() {
         v-if="isEditingDescription"
         v-model="localDescription"
         rows="2"
-        class="w-full bg-transparent border border-blue-400 rounded-md p-1 outline-none"
+        class="w-full bg-transparent border border-blue-400 rounded-md p-1 outline-none
+               focus-visible:ring-0"
         @blur="onDescriptionBlur"
       ></textarea>
 
       <button
         v-else
         type="button"
-        class="text-left line-clamp-2 w-full"
+        class="text-left line-clamp-2 w-full
+               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 rounded-sm"
         @click="isEditingDescription = true"
       >
         {{ task.description || 'Add a description...' }}
@@ -223,7 +231,8 @@ function submitAddTag() {
           {{ tag.name }}
           <button
             type="button"
-            class="text-[9px] hover:opacity-70"
+            class="text-[9px] hover:opacity-70
+                   focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-current rounded-full"
             @click="handleRemoveTag(tag)"
           >
             ✕
@@ -246,14 +255,16 @@ function submitAddTag() {
         />
         <button
           type="button"
-          class="text-[11px] px-2 py-0.5 rounded-md bg-blue-600 text-white hover:bg-blue-700"
+          class="text-[11px] px-2 py-0.5 rounded-md bg-blue-600 text-white hover:bg-blue-700
+                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
           @click="submitAddTag"
         >
           Save
         </button>
         <button
           type="button"
-          class="text-[11px] px-2 py-0.5 rounded-md border border-slate-300 dark:border-slate-600"
+          class="text-[11px] px-2 py-0.5 rounded-md border border-slate-300 dark:border-slate-600
+                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
           @click="cancelAddTag"
         >
           Cancel
@@ -263,7 +274,8 @@ function submitAddTag() {
       <button
         v-else
         type="button"
-        class="text-[11px] text-blue-600 dark:text-emerald-300 hover:underline mt-1"
+        class="text-[11px] text-blue-600 dark:text-emerald-300 hover:underline mt-1
+               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 rounded-sm"
         @click="startAddTag"
       >
         + Add tag
@@ -313,7 +325,8 @@ function submitAddTag() {
 
         <button
           type="button"
-          class="p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700"
+          class="p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700
+                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
           @click="$emit('edit', { openFull: true })"
           aria-label="Edit task"
         >
@@ -321,7 +334,8 @@ function submitAddTag() {
         </button>
         <button
           type="button"
-          class="p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-900/40"
+          class="p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-900/40
+                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
           @click="$emit('delete')"
           aria-label="Delete task"
         >

@@ -1,25 +1,38 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, computed } from 'vue';
 import axios from 'axios';
 import { useTasks } from '@/Composables/useTasks';
 import TaskColumn from '@/Components/TaskColumn.vue';
 import CreateTaskModal from '@/Components/CreateTaskModal.vue';
+import CommandPalette from '@/Components/CommandPalette.vue';
 import { toast } from 'vue3-toastify';
 
 const props = defineProps({
+  auth: { type: Object, required: false, default: () => ({}) },
   teamMembers: {
     type: Array,
     default: () => [],
   },
+  errors: {
+    type: Object,
+    default: () => ({}),
+  },
 });
 
 const showCreate = ref(false);
+const showCommandPalette = ref(false);
+const currentUserId = computed(() => props.auth?.user?.id ?? null);
+
 
 const {
+  tasks,
   todoTasks,
   inProgressTasks,
   doneTasks,
   isLoading,
+  isCreating,
+  filterAssigned,
+  search,
   loadTasks,
   createTask,
   updateTaskInline,
@@ -86,13 +99,37 @@ async function handleLogout() {
   toast.success('You have been logged out');
   window.location.href = '/login';
 }
+
+/**
+ * Command palette handlers
+ */
+function handleSetSearch(value) {
+  search.value = value || '';
+  loadTasks();
+}
+
+function handleSetFilterAssigned(value) {
+  filterAssigned.value = value;
+  loadTasks();
+}
+
+function handleSwitchColumn(status) {
+  const el = document.querySelector(`[data-column="${status}"]`);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+function handleMarkTaskDone(taskId) {
+  updateTaskInline(taskId, { status: 'done' });
+}
 </script>
 
 <template>
   <div class="min-h-screen bg-slate-100 dark:bg-slate-950">
     <div class="max-w-6xl mx-auto px-4 py-6 space-y-4">
       <!-- Header bar -->
-      <header class="flex items-center justify-between">
+      <header class="flex items-center justify-between gap-4">
         <div class="flex items-center gap-2">
           <span class="text-lg font-semibold">TaskFlow</span>
           <span class="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700">
@@ -101,18 +138,36 @@ async function handleLogout() {
         </div>
 
         <div class="flex items-center gap-3">
-          <input
-            type="search"
-            placeholder="Search tasks..."
-            class="w-48 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
+          <!-- Search input is tied to search ref from useTasks -->
+          <div class="flex items-center gap-2">
+            <input
+              v-model="search"
+              type="search"
+              placeholder="Search tasks..."
+              class="w-48 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              @keyup.enter="loadTasks"
+            />
+            <button
+              type="button"
+              class="hidden md:inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-300"
+              @click="showCommandPalette = true"
+            >
+              <span class="text-xs text-slate-400">⌘K</span>
+              <span>Command palette</span>
+            </button>
+          </div>
 
           <button
             type="button"
             class="text-sm px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 active:scale-95 transition"
             @click="showCreate = true"
+            :disabled="isCreating"
           >
-            + New
+            <span v-if="!isCreating">+ New</span>
+            <span v-else class="flex items-center gap-1">
+              <span class="h-3 w-3 rounded-full border-2 border-t-transparent border-white animate-spin" />
+              Creating...
+            </span>
           </button>
 
           <div class="flex items-center gap-2">
@@ -133,11 +188,42 @@ async function handleLogout() {
         </div>
       </header>
 
+      <!-- Optional little row to show current filter -->
+      <div class="flex items-center justify-between text-xs text-slate-500">
+        <div class="flex items-center gap-2">
+          <span>Filter:</span>
+          <button
+            type="button"
+            class="px-2 py-0.5 rounded-full border text-[11px]"
+            :class="filterAssigned === 'all'
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700'"
+            @click="handleSetFilterAssigned('all')"
+          >
+            All
+          </button>
+          <button
+            type="button"
+            class="px-2 py-0.5 rounded-full border text-[11px]"
+            :class="filterAssigned === 'me'
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700'"
+            @click="handleSetFilterAssigned('me')"
+          >
+            My tasks
+          </button>
+        </div>
+        <div class="text-[11px] text-slate-400">
+          Press Cmd+K or Ctrl+K for the command palette
+        </div>
+      </div>
+
       <!-- Columns -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mt-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mt-2">
         <TaskColumn
           title="To Do"
           status="todo"
+          data-column="todo"
           :tasks="todoTasks"
           :is-loading="isLoading"
           :team-members="props.teamMembers"
@@ -145,10 +231,12 @@ async function handleLogout() {
           @edit-task="handleEdit"
           @delete-task="handleDelete"
           @assign-task="handleAssign"
+          @open-create="showCreate = true"
         />
         <TaskColumn
           title="In Progress"
           status="in_progress"
+          data-column="in_progress"
           :tasks="inProgressTasks"
           :is-loading="isLoading"
           :team-members="props.teamMembers"
@@ -160,6 +248,7 @@ async function handleLogout() {
         <TaskColumn
           title="Done"
           status="done"
+          data-column="done"
           :tasks="doneTasks"
           :is-loading="isLoading"
           :team-members="props.teamMembers"
@@ -177,5 +266,19 @@ async function handleLogout() {
       @close="showCreate = false"
       @submit="handleCreate"
     />
+
+    <CommandPalette
+      v-model:show="showCommandPalette"
+      :tasks="tasks"
+      :team-members="props.teamMembers"
+      :current-user-id="currentUserId"
+      @create-task="showCreate = true"
+      @set-search="handleSetSearch"
+      @set-filter-assigned="handleSetFilterAssigned"
+      @switch-column="handleSwitchColumn"
+      @mark-task-done="handleMarkTaskDone"
+    />
+
+
   </div>
 </template>

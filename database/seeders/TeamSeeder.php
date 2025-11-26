@@ -24,7 +24,7 @@ class TeamSeeder extends Seeder
 
         foreach ($teams as $data) {
             Team::updateOrCreate(
-                ['slug' => $data['slug']],          // unique key
+                ['slug' => $data['slug']],
                 ['name' => $data['name'], 'color' => $data['color']]
             );
         }

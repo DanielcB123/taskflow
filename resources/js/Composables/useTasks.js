@@ -7,6 +7,7 @@ import confetti from 'canvas-confetti';
 export function useTasks() {
   const tasks = ref([]);
   const isLoading = ref(false);
+  const isCreating = ref(false); // for create button loading state
   const filterAssigned = ref('all'); // 'all' | 'me' | userId
   const search = ref('');
 
@@ -44,33 +45,48 @@ export function useTasks() {
 
   async function loadTasks() {
     isLoading.value = true;
+    const startedAt = performance.now();
+
     try {
       const data = await ApiService.get('tasks', {
         assigned_to: filterAssigned.value === 'all' ? null : filterAssigned.value,
         search: search.value || null,
       });
+
       if (data.success) {
         tasks.value = data.tasks;
       }
     } catch (e) {
       // toast handled in ApiService
     } finally {
-      setTimeout(() => {
+      const elapsed = performance.now() - startedAt;
+      const remaining = 300 - elapsed; // min 300ms for smooth skeleton
+
+      if (remaining > 0) {
+        setTimeout(() => {
+          isLoading.value = false;
+        }, remaining);
+      } else {
         isLoading.value = false;
-      }, 300);
+      }
     }
   }
 
   async function createTask(payload) {
+    isCreating.value = true;
+
     try {
       const data = await ApiService.post('tasks', payload);
       if (data.success && data.task) {
-        tasks.value.push(data.task);
+        // Put new task at top so it can slide in nicely in a TransitionGroup
+        tasks.value = [data.task, ...tasks.value];
         toast.success('New task created');
       }
-      return data.task;
+      return data.task || null;
     } catch (e) {
       return null;
+    } finally {
+      isCreating.value = false;
     }
   }
 
@@ -110,6 +126,10 @@ export function useTasks() {
 
     const original = tasks.value.map(t => ({ ...t }));
 
+    // Optional per-card loading flag for micro animation
+    const movingId = taskId;
+    markTaskMoving(movingId, true);
+
     // Optimistic update
     tasks.value[index].status = newStatus;
     tasks.value[index].position = newPosition;
@@ -123,7 +143,10 @@ export function useTasks() {
       if (data.success && data.task) {
         const idx = tasks.value.findIndex(t => t.id === taskId);
         if (idx !== -1) {
-          tasks.value[idx] = data.task;
+          tasks.value[idx] = {
+            ...data.task,
+            _isMoving: false,
+          };
         }
         if (data.status_changed_to === 'done') {
           celebrateDone();
@@ -133,6 +156,8 @@ export function useTasks() {
       }
     } catch (e) {
       tasks.value = original;
+    } finally {
+      markTaskMoving(movingId, false);
     }
   }
 
@@ -174,6 +199,15 @@ export function useTasks() {
     }
   }
 
+  function markTaskMoving(taskId, isMoving) {
+    const index = tasks.value.findIndex(t => t.id === taskId);
+    if (index === -1) return;
+    tasks.value[index] = {
+      ...tasks.value[index],
+      _isMoving: isMoving,
+    };
+  }
+
   function celebrateDone() {
     confetti({
       particleCount: 80,
@@ -189,6 +223,7 @@ export function useTasks() {
     inProgressTasks,
     doneTasks,
     isLoading,
+    isCreating,
     filterAssigned,
     search,
     loadTasks,
