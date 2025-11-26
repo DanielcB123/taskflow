@@ -2,16 +2,31 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use App\Models\Team;
 use Illuminate\Database\Seeder;
 
 class TeamSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
-        //
+        $teams = [
+            [
+                'slug'  => 'mediahaus-squad',
+                'name'  => 'MediaHaus Squad',
+                'color' => '#2563eb',
+            ],
+            [
+                'slug'  => 'design-team',
+                'name'  => 'Design Team',
+                'color' => '#ec4899',
+            ],
+        ];
+
+        foreach ($teams as $data) {
+            Team::updateOrCreate(
+                ['slug' => $data['slug']],          // unique key
+                ['name' => $data['name'], 'color' => $data['color']]
+            );
+        }
     }
 }

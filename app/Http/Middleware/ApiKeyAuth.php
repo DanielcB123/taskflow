@@ -15,16 +15,20 @@ class ApiKeyAuth
 
         if (! $apiKey) {
             return response()->json([
-                'message' => 'API key is missing.',
-            ], 401);
+                'success' => false,
+                'error'   => 'API key is missing. Please log in again.',
+                'should_refresh_token' => true,
+            ], 200);
         }
 
         $user = User::where('api_key', $apiKey)->first();
 
         if (! $user) {
             return response()->json([
-                'message' => 'Invalid API key.',
-            ], 401);
+                'success' => false,
+                'error'   => 'Invalid API key. Please log in again.',
+                'should_refresh_token' => true,
+            ], 200);
         }
 
         // Set the authenticated user for this request

@@ -1,28 +1,57 @@
-import axios from 'axios'
+// resources/js/Services/ApiService.js
+import axios from 'axios';
+import { toast } from 'vue3-toastify';
 
-const api = axios.create({
+const instance = axios.create({
   baseURL: '/api',
-})
+});
 
-api.interceptors.request.use((config) => {
-  const apiKey = localStorage.getItem('api_key')
+instance.interceptors.request.use((config) => {
+  const apiKey = window.localStorage.getItem('taskflow_api_key');
   if (apiKey) {
-    config.headers['X-API-Key'] = apiKey
+    config.headers['X-API-Key'] = apiKey;
   }
-  return config
-})
+  return config;
+});
+
+instance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    toast.error('There was a problem talking to the server. Try again in a moment.');
+    return Promise.reject(error);
+  }
+);
 
 export default {
-  getTasks() {
-    return api.get('/tasks')
+  async get(url, params = {}) {
+    const { data } = await instance.get(url, { params });
+    if (data.success === false && data.error) {
+      toast.error(data.error);
+    }
+    return data;
   },
-  createTask(payload) {
-    return api.post('/tasks', payload)
+
+  async post(url, payload = {}) {
+    const { data } = await instance.post(url, payload);
+    if (data.success === false && data.error) {
+      toast.error(data.error);
+    }
+    return data;
   },
-  updateTask(id, payload) {
-    return api.put(`/tasks/${id}`, payload)
+
+  async patch(url, payload = {}) {
+    const { data } = await instance.patch(url, payload);
+    if (data.success === false && data.error) {
+      toast.error(data.error);
+    }
+    return data;
   },
-  deleteTask(id) {
-    return api.delete(`/tasks/${id}`)
+
+  async delete(url) {
+    const { data } = await instance.delete(url);
+    if (data.success === false && data.error) {
+      toast.error(data.error);
+    }
+    return data;
   },
-}
+};

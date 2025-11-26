@@ -15,7 +15,7 @@ return new class extends Migration {
                 ->cascadeOnDelete();
 
             $table->string('name');
-            $table->string('color')->nullable(); // hex color
+            $table->string('color')->nullable(); 
 
             $table->timestamps();
         });

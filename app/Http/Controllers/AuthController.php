@@ -50,4 +50,30 @@ class AuthController extends Controller
 
         return redirect()->route('login');
     }
+
+    public function apiToken(Request $request)
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return response()->json([
+                'success' => false,
+                'error'   => 'Not authenticated.',
+            ]);
+        }
+
+        // Create or refresh API key if missing
+        if (! $user->api_key) {
+            $user->api_key = Str::random(40);
+        }
+
+        $user->api_key_last_used_at = now();
+        $user->save();
+
+        return response()->json([
+            'success'    => true,
+            'api_key'    => $user->api_key,
+            // 'expires_at' => $user->api_key_expires_at,
+        ]);
+    }
 }
