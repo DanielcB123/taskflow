@@ -14,6 +14,13 @@ const localTitle = ref(props.task.title);
 const localDescription = ref(props.task.description || '');
 const localAssignedId = ref(props.task.assigned_to || '');
 
+// local tag state for inline edits
+const localTags = ref(props.task.tags ? [...props.task.tags] : []);
+const isAddingTag = ref(false);
+const newTagName = ref('');
+const newTagColor = ref('#0ea5e9');
+
+// keep locals in sync when parent updates
 watch(
   () => props.task.title,
   (val) => {
@@ -35,6 +42,15 @@ watch(
   }
 );
 
+watch(
+  () => props.task.tags,
+  (val) => {
+    localTags.value = val ? [...val] : [];
+  }
+);
+
+const priorities = ['high','medium', 'low'];
+
 const priorityColor = computed(() => {
   switch (props.task.priority) {
     case 'high':
@@ -46,11 +62,19 @@ const priorityColor = computed(() => {
   }
 });
 
+function onPriorityClick() {
+  const current = props.task.priority || 'medium';
+  const currentIndex = priorities.indexOf(current);
+  const next = priorities[(currentIndex + 1) % priorities.length];
+
+  emits('edit', { priority: next });
+}
+
 function onTitleBlur() {
   isEditingTitle.value = false;
   if (localTitle.value !== props.task.title) {
     emits('edit', { title: localTitle.value });
-}
+  }
 }
 
 function onDescriptionBlur() {
@@ -68,6 +92,63 @@ function onDragStart(e) {
 
 function onAssignChange() {
   emits('assign', localAssignedId.value || null);
+}
+
+/**
+ * Inline tags
+ */
+function syncAndEmitTags(updated) {
+  localTags.value = updated;
+
+  // strip out any extra properties, send only what backend expects
+  emits('edit', {
+    tags: updated.map((tag) => ({
+      id: tag.id ?? undefined,
+      name: tag.name,
+      color: tag.color,
+    })),
+  });
+}
+
+function handleRemoveTag(tagToRemove) {
+  const updated = localTags.value.filter((tag) => {
+    if (tag.id && tagToRemove.id) {
+      return tag.id !== tagToRemove.id;
+    }
+    // fall back to name match if no id yet
+    return !(tag.name === tagToRemove.name && tag.color === tagToRemove.color);
+  });
+
+  syncAndEmitTags(updated);
+}
+
+function startAddTag() {
+  isAddingTag.value = true;
+  newTagName.value = '';
+  newTagColor.value = '#0ea5e9';
+}
+
+function cancelAddTag() {
+  isAddingTag.value = false;
+  newTagName.value = '';
+}
+
+function submitAddTag() {
+  if (!newTagName.value.trim()) {
+    return;
+  }
+
+  const newTag = {
+    name: newTagName.value.trim(),
+    color: newTagColor.value || '#0ea5e9',
+  };
+
+  const updated = [...localTags.value, newTag];
+  syncAndEmitTags(updated);
+
+  newTagName.value = '';
+  newTagColor.value = '#0ea5e9';
+  isAddingTag.value = false;
 }
 </script>
 
@@ -98,12 +179,17 @@ function onAssignChange() {
           {{ task.title }}
         </button>
       </div>
-      <span
-        class="text-[11px] px-2 py-0.5 rounded-full border font-medium"
+      <button
+        type="button"
+        class="text-[11px] px-2 py-0.5 rounded-full border font-medium
+              hover:brightness-110 transition-colors"
         :class="priorityColor"
+        @click="onPriorityClick"
+        title="Click to change priority"
       >
         {{ task.priority.toUpperCase() }}
-      </span>
+      </button>
+
     </div>
 
     <div class="text-xs text-slate-500 dark:text-slate-300">
@@ -125,15 +211,63 @@ function onAssignChange() {
       </button>
     </div>
 
-    <div v-if="task.tags && task.tags.length" class="flex flex-wrap gap-1">
-      <span
-        v-for="tag in task.tags"
-        :key="tag.id || tag.name"
-        class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium"
-        :style="{ backgroundColor: tag.color + '20', color: tag.color }"
+    <!-- Tags block with inline add and delete -->
+    <div class="space-y-1">
+      <div v-if="localTags.length" class="flex flex-wrap gap-1">
+        <span
+          v-for="tag in localTags"
+          :key="tag.id || tag.name"
+          class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
+          :style="{ backgroundColor: (tag.color || '#0ea5e9') + '20', color: tag.color || '#0ea5e9' }"
+        >
+          {{ tag.name }}
+          <button
+            type="button"
+            class="text-[9px] hover:opacity-70"
+            @click="handleRemoveTag(tag)"
+          >
+            ✕
+          </button>
+        </span>
+      </div>
+
+      <!-- Inline add tag control -->
+      <div v-if="isAddingTag" class="flex items-center gap-1 mt-1">
+        <input
+          v-model="newTagName"
+          type="text"
+          placeholder="Tag label"
+          class="flex-1 text-[11px] rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+        />
+        <input
+          v-model="newTagColor"
+          type="color"
+          class="w-7 h-7 rounded-md border border-slate-300 dark:border-slate-600"
+        />
+        <button
+          type="button"
+          class="text-[11px] px-2 py-0.5 rounded-md bg-blue-600 text-white hover:bg-blue-700"
+          @click="submitAddTag"
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          class="text-[11px] px-2 py-0.5 rounded-md border border-slate-300 dark:border-slate-600"
+          @click="cancelAddTag"
+        >
+          Cancel
+        </button>
+      </div>
+
+      <button
+        v-else
+        type="button"
+        class="text-[11px] text-blue-600 dark:text-emerald-300 hover:underline mt-1"
+        @click="startAddTag"
       >
-        {{ tag.name }}
-      </span>
+        + Add tag
+      </button>
     </div>
 
     <div class="flex items-center justify-between mt-1">
@@ -153,21 +287,12 @@ function onAssignChange() {
           {{ task.assigned_user.name }}
         </span>
 
-        <select
+        <span
           v-else
-          v-model="localAssignedId"
-          class="text-[11px] rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
-          @change="onAssignChange"
+          class="text-[11px] text-slate-400"
         >
-          <option value="">Unassigned</option>
-          <option
-            v-for="member in teamMembers"
-            :key="member.id"
-            :value="member.id"
-          >
-            {{ member.name }}
-          </option>
-        </select>
+          Unassigned
+        </span>
       </div>
 
       <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

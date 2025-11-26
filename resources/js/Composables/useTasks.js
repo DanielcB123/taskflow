@@ -77,14 +77,21 @@ export function useTasks() {
   async function updateTaskInline(taskId, fields) {
     const index = tasks.value.findIndex(t => t.id === taskId);
     if (index === -1) return;
-
+  
     const original = { ...tasks.value[index] };
+  
+    // optimistic update, including tags
     tasks.value[index] = { ...tasks.value[index], ...fields };
-
+  
     try {
       const data = await ApiService.patch(`tasks/${taskId}`, fields);
       if (data.success && data.task) {
-        tasks.value[index] = data.task;
+        // merge, do not blow away any local fields accidentally
+        tasks.value[index] = {
+          ...tasks.value[index],
+          ...data.task,
+        };
+  
         if (data.status_changed_to === 'done') {
           celebrateDone();
         }
@@ -95,6 +102,7 @@ export function useTasks() {
       tasks.value[index] = original;
     }
   }
+  
 
   async function moveTask(taskId, newStatus, newPosition) {
     const index = tasks.value.findIndex(t => t.id === taskId);

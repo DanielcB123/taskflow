@@ -15,26 +15,20 @@ class TaskController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $teamId = $user->team_id;
-
-        $assignedTo = $request->input('assigned_to'); // optional user id
-        $search     = $request->input('search');
 
         $query = Task::with(['assignedUser', 'creator', 'tags'])
-            ->where('team_id', $teamId)
-            ->orderBy('status')
+            ->where('team_id', $user->team_id)
+            ->with(['assignedUser', 'tags']) 
             ->orderBy('position');
 
-        if ($assignedTo === 'me') {
-            $query->where('assigned_to', $user->id);
-        } elseif (!empty($assignedTo)) {
-            $query->where('assigned_to', $assignedTo);
+        if ($assigned = $request->input('assigned_to')) {
+            $query->where('assigned_to', $assigned);
         }
 
-        if (!empty($search)) {
+        if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%");
+                ->orWhere('description', 'like', "%{$search}%");
             });
         }
 
@@ -49,7 +43,7 @@ class TaskController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
-
+    
         $data = $request->validate([
             'title'       => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
@@ -60,13 +54,16 @@ class TaskController extends Controller
             'tags.*.name' => ['required', 'string', 'max:50'],
             'tags.*.color'=> ['required', 'string', 'max:20'],
         ]);
-
+    
         $teamId = $user->team_id;
-
+    
         $maxPosition = Task::where('team_id', $teamId)
             ->where('status', $data['status'])
             ->max('position');
-
+    
+        $tagsPayload = $data['tags'] ?? [];
+        unset($data['tags']);
+    
         $task = Task::create([
             'team_id'     => $teamId,
             'title'       => $data['title'],
@@ -78,82 +75,94 @@ class TaskController extends Controller
             'position'    => ($maxPosition ?? 0) + 1,
             'completed_at'=> $data['status'] === 'done' ? Carbon::now() : null,
         ]);
-
-        if (!empty($data['tags'])) {
-            foreach ($data['tags'] as $tag) {
-                TaskTag::create([
-                    'task_id' => $task->id,
-                    'name'    => $tag['name'],
-                    'color'   => $tag['color'],
+    
+        if (!empty($tagsPayload)) {
+            foreach ($tagsPayload as $tag) {
+                $task->tags()->create([
+                    'name'  => $tag['name'],
+                    'color' => $tag['color'],
                 ]);
             }
         }
-
+    
         $task->load(['assignedUser', 'creator', 'tags']);
-
+    
         return response()->json([
             'success' => true,
-            'message' => 'Task created successfully',
             'task'    => $task,
         ]);
     }
+    
 
     public function update(Request $request, Task $task)
     {
         $user = $request->user();
-
-        if ($task->team_id !== $user->team_id) {
-            return response()->json([
-                'success' => false,
-                'error'   => 'You cannot modify tasks from another team.',
-            ], 200);
-        }
-
+    
+        abort_unless($task->team_id === $user->team_id, 403);
+    
         $data = $request->validate([
             'title'       => ['sometimes', 'string', 'max:255'],
             'description' => ['sometimes', 'nullable', 'string'],
-            'priority'    => ['sometimes', Rule::in(['low', 'medium', 'high'])],
-            'status'      => ['sometimes', Rule::in(['todo', 'in_progress', 'done'])],
+            'priority'    => ['sometimes', 'in:low,medium,high'],
+            'status'      => ['sometimes', 'in:todo,in_progress,done'],
+            'assigned_to' => ['sometimes', 'nullable', 'exists:users,id'],
+            'position'    => ['sometimes', 'integer'],
             'tags'        => ['sometimes', 'array'],
             'tags.*.name' => ['required_with:tags', 'string', 'max:50'],
-            'tags.*.color'=> ['required_with:tags', 'string', 'max:20'],
+            'tags.*.color'=> ['nullable', 'string', 'max:20'],
         ]);
-
-        $oldStatus = $task->status;
-
-        $task->fill($data);
-
+    
+        $originalStatus = $task->status;
+    
+        // Remove tags from the fill data so we do not treat them as a normal attribute
+        $tagsPayload = array_key_exists('tags', $data) ? $data['tags'] : null;
+        unset($data['tags']);
+    
+        // Fill scalar fields
+        if (!empty($data)) {
+            $task->fill($data);
+        }
+    
+        // Handle completed_at when status changes
         if (array_key_exists('status', $data)) {
             if ($data['status'] === 'done' && !$task->completed_at) {
-                $task->completed_at = Carbon::now();
-            }
-            if ($data['status'] !== 'done') {
+                $task->completed_at = now();
+            } elseif ($data['status'] !== 'done') {
                 $task->completed_at = null;
             }
         }
-
+    
         $task->save();
-
-        if (array_key_exists('tags', $data)) {
+    
+        // If tags were sent, overwrite all tags for this task
+        if ($tagsPayload !== null) {
             $task->tags()->delete();
-            foreach ($data['tags'] as $tag) {
-                TaskTag::create([
-                    'task_id' => $task->id,
-                    'name'    => $tag['name'],
-                    'color'   => $tag['color'],
+    
+            foreach ($tagsPayload as $tag) {
+                if (!isset($tag['name']) || $tag['name'] === '') {
+                    continue;
+                }
+    
+                $task->tags()->create([
+                    'name'  => $tag['name'],
+                    'color' => $tag['color'] ?? '#0ea5e9',
                 ]);
             }
         }
-
+    
+        // Make sure we return the task with all relations, including tags
         $task->load(['assignedUser', 'creator', 'tags']);
-
+    
         return response()->json([
             'success'           => true,
-            'message'           => 'Task updated successfully',
             'task'              => $task,
-            'status_changed_to' => $task->status !== $oldStatus ? $task->status : null,
+            'status_changed_to' => $originalStatus !== $task->status
+                ? $task->status
+                : null,
         ]);
     }
+    
+
 
     public function move(Request $request, Task $task)
     {
