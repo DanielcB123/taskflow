@@ -9,7 +9,8 @@
 - composer install
 - npm install
 
-- in .env change | # DB_DATABASE=laravel to -> DB_DATABASE=database/database.sqlite 
+    - in .env change | # DB_DATABASE=laravel to -> DB_DATABASE=database/database.sqlite 
+- php artisan optimize
 
 - php artisan key:generate
 - php artisan migrate:fresh --seed
